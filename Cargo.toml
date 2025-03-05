@@ -1,0 +1,14 @@
+[package]
+name = "kerasty"
+version = "0.1.0"
+description = "Keras for Rust with support for Web Assembly."
+categories = ["science", "wasm", "web-programming"]
+keywords = ["keras", "wasm", "webassembly", "ai", "machinelearning"]
+homepage = "https://docs.rs/kerasty/latest/kerasty/"
+repository = "https://github.com/HomeroRR/kerasty"
+authors = ["Homero Roman", "Frederick Roman"]
+license = "MIT"
+readme = "README.md"
+edition = "2021"
+
+[dependencies]
