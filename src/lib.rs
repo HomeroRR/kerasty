@@ -1,3 +1,15 @@
+//! Keras for Rust with support for Web Assembly.
+//!
+//! ## Features
+//!
+//! - Candle backend
+//!
+//! # Roadmap of Supported Layers
+
+//! |    Layer   | State |                        Example                            |
+//! |------------|-------|-----------------------------------------------------------|
+//! |    Dense   |&#9989;| [add](https://docs.rs/kerasty/latest/kerasty/fn.add.html) |
+
 /// Adds two numbers.
 ///
 /// # Examples
