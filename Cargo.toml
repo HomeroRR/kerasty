@@ -12,4 +12,5 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
+candle-core = "=0.8.3"
 candle-nn = "0.8.3"
