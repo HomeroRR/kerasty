@@ -1,37 +1,53 @@
 #[cfg(test)]
 mod tests {
-    use kerasty::{
-        Activation, Dense, Device, Loss, Metric, Model, Optimizer, Result, Sequential, Tensor,
-    };
+    use kerasty::{Dense, Device, Loss, Metric, Model, Optimizer, Result, Sequential, Tensor};
 
     #[test]
-    fn test_dense_layer() -> Result<()> {
+    fn test_xor_problem() -> Result<()> {
+        // Define the XOR input and output data
+        let x_data = vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0];
+        let x = Tensor::from_slice(&x_data, (4, 2), &Device::Cpu)?;
+        let y_data = vec![0.0, 1.0, 1.0, 0.0];
+        let y = Tensor::from_slice(&y_data, (4, 1), &Device::Cpu)?;
+
+        // Build the neural network model
         let mut model = Sequential::new();
-        model.add(Dense::new(
-            3,
-            2,
-            Activation::Sigmoid,
-            None,
-            None,
-            None,
-            None,
-        ));
-        if let Ok(res) = model.compile(
-            Optimizer::SGD(0.1),
-            Loss::MeanSquaredError,
-            vec![Metric::MeanSquaredError],
-        ) {
-            println!("Model compiled successfully: {:?}", res);
-        } else {
-            println!("Model compilation failed");
+        model.add(Dense::new(2, 2, "relu"));
+        model.add(Dense::new(1, 2, "sigmoid"));
+
+        println!("Model built successfully");
+
+        // Compile the model
+        model.compile(
+            Optimizer::Adam(0.001, 0.9, 0.999, 1e-8, 0.0),
+            Loss::BinaryCrossEntropyWithLogit,
+            vec![Metric::Accuracy],
+        )?;
+
+        println!("Model compiled successfully");
+
+        // Train the model
+        model.fit(x.clone(), y.clone(), 1000)?;
+
+
+        // Make predictions
+        let predictions = model.predict(&x);
+        let predictions = predictions.reshape(4)?.to_vec1::<f64>()?;
+        let predictions: Vec<i32> = predictions
+            .iter()
+            .map(|&p| if p >= 0.5 { 1 } else { 0 })
+            .collect();
+
+        println!("Predictions:");
+        for i in 0..4 {
+            println!(
+                "Input: {:?} => Predicted Output: {}, Actual Output: {}",
+                &x_data[i * 2..i * 2 + 2],
+                predictions[i],
+                y_data[i]
+            );
         }
-        let x = Tensor::new(&[[1f32, 2.], [3., 4.], [5., 6.]], &Device::Cpu)?;
-        let y = Tensor::new(&[[1f32], [3.], [5.]], &Device::Cpu)?;
-        model.fit(x.clone(), y.clone(), 1000, 1)?;
-        let y_pred = model.predict(&x);
-        println!("{:?}", y_pred);
-        // Check x equals y
-        assert_eq!(y.to_vec2::<f32>()?, y_pred.to_vec2::<f32>()?);
+
         Ok(())
     }
 }

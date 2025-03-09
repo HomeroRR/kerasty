@@ -1,9 +1,8 @@
 pub use candle_core::{bail, DType, Device, Result, Tensor};
-use candle_nn::{Linear, Module, VarBuilder};
+use candle_nn::ops::{sigmoid, softmax};
+use candle_nn::{Linear, Module, VarBuilder, VarMap};
 
-use crate::common::definitions::{
-    Activation, Initializer, Regularizer,
-};
+use crate::common::definitions::Activation;
 use crate::common::traits::Layer;
 
 /* Function for creatin a Dense layer from Candle in the style of Keras */
@@ -12,38 +11,24 @@ pub struct Dense {
     units: usize,
     input_dim: usize,
     activation: Activation,
-    kernel_initializer: Option<Initializer>,
-    bias_initializer: Option<Initializer>,
-    kernel_regularizer: Option<Regularizer>,
-    bias_regularizer: Option<Regularizer>,
     linear: Option<Linear>,
 }
 
 impl Dense {
-    pub fn new(
-        units: usize,
-        input_dim: usize,
-        activation: Activation,
-        kernel_initializer: Option<Initializer>,
-        bias_initializer: Option<Initializer>,
-        kernel_regularizer: Option<Regularizer>,
-        bias_regularizer: Option<Regularizer>,
-    ) -> Self {
+    pub fn new(units: usize, input_dim: usize, activation: &str) -> Self {
+        let activation = activation.parse().unwrap_or(Activation::ReLU);
         Dense {
             units,
             input_dim,
-            activation,
-            kernel_initializer,
-            bias_initializer,
-            kernel_regularizer,
-            bias_regularizer,
+            activation: activation,
             linear: None,
         }
     }
 }
 
 impl Layer for Dense {
-    fn init(&self, vb: VarBuilder) -> Result<Self> {
+    fn init(&self, varmap: &VarMap, dtype: DType, dev: &Device, name: &str) -> Result<Self> {
+        let vb = VarBuilder::from_varmap(varmap, dtype, &dev).pp(name);
         let (out_dim, in_dim) = (self.units, self.input_dim);
         let ws = vb.get_with_hints((out_dim, in_dim), "weight", candle_nn::init::ZERO)?;
         let bs = vb.get_with_hints(out_dim, "bias", candle_nn::init::ZERO)?;
@@ -58,7 +43,13 @@ impl Layer for Dense {
 impl Module for Dense {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         if let Some(linear) = &self.linear {
-            linear.forward(xs)
+            let res = linear.forward(xs)?;
+            match self.activation {
+                Activation::Linear => Ok(res),
+                Activation::Sigmoid => Ok(sigmoid(&res)?),
+                Activation::ReLU => Ok(res.relu()?),
+                Activation::Softmax => Ok(softmax(&res, 1)?),
+            }
         } else {
             bail!("Linear module not initialized")
         }

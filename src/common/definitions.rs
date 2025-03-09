@@ -1,9 +1,27 @@
+use candle_core::{bail, Error, Result};
+use candle_nn::{AdamW, SGD};
+use std::str::FromStr;
 /* Define the Activation types */
 #[derive(Clone, Debug)]
 pub enum Activation {
-    Sigmoid,
+    Linear,
     ReLU,
     Softmax,
+    Sigmoid,
+}
+
+impl FromStr for Activation {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "linear" => Ok(Activation::Linear),
+            "relu" => Ok(Activation::ReLU),
+            "softmax" => Ok(Activation::Softmax),
+            "sigmoid" => Ok(Activation::Sigmoid),
+            _ => bail!("Unknown Activation type: {}", s),
+        }
+    }
 }
 
 /* Define the Initializer types */
@@ -26,19 +44,25 @@ pub enum Regularizer {
 #[derive(Clone, Debug)]
 pub enum Optimizer {
     SGD(f64),
-    Adam(f64, f64, f64),
+    Adam(f64, f64, f64, f64, f64),
+}
+pub enum OptimizerInstance {
+    SGD(SGD),
+    Adam(AdamW),
 }
 
 /* Define the Loss types */
 #[derive(Clone, Debug)]
 pub enum Loss {
-    MeanSquaredError,
+    MSE,
+    NLL,
+    BinaryCrossEntropyWithLogit,
     CrossEntropy,
 }
 
 /* Define the Metric types */
 #[derive(Clone, Debug)]
 pub enum Metric {
-    MeanSquaredError,
+    MSE,
     Accuracy,
 }
