@@ -16,7 +16,7 @@ pub struct Dense {
 
 impl Dense {
     pub fn new(units: usize, input_dim: usize, activation: &str) -> Self {
-        let activation = activation.parse().unwrap_or(Activation::ReLU);
+        let activation = activation.parse().unwrap_or(Activation::Linear);
         Dense {
             units,
             input_dim,
@@ -30,9 +30,7 @@ impl Layer for Dense {
     fn init(&self, varmap: &VarMap, dtype: DType, dev: &Device, name: &str) -> Result<Self> {
         let vb = VarBuilder::from_varmap(varmap, dtype, &dev).pp(name);
         let (out_dim, in_dim) = (self.units, self.input_dim);
-        let ws = vb.get_with_hints((out_dim, in_dim), "weight", candle_nn::init::ZERO)?;
-        let bs = vb.get_with_hints(out_dim, "bias", candle_nn::init::ZERO)?;
-        let linear = Linear::new(ws, Some(bs));
+        let linear = candle_nn::linear(in_dim, out_dim, vb)?;
         Ok(Self {
             linear: Some(linear),
             ..self.clone()

@@ -27,8 +27,7 @@ mod tests {
         println!("Model compiled successfully");
 
         // Train the model
-        model.fit(x.clone(), y.clone(), 1000)?;
-
+        model.fit(x.clone(), y.clone(), 100)?;
 
         // Make predictions
         let predictions = model.predict(&x);

@@ -1,11 +1,9 @@
-
 #[cfg(test)]
 mod tests {
     use kerasty::*;
 
-
     #[test]
-    fn it_works() -> Result<()> {
+    fn test_import_kerasty() -> Result<()> {
         Ok(())
     }
 }
