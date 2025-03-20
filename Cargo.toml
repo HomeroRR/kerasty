@@ -10,7 +10,8 @@ authors = ["Homero Roman", "Frederick Roman"]
 license = "MIT"
 readme = "README.md"
 edition = "2021"
+rust-version = "1.84.0"
 
 [dependencies]
-candle-core = "=0.8.3"
-candle-nn = "0.8.3"
+candle-core = "0.8.4"
+candle-nn = "=0.8.3"
