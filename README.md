@@ -3,11 +3,14 @@ Keras for Candle (Rust ML framework) with support for Web Assembly.
 
 [![Crates.io][crates-badge]][crates-url]
 [![MIT licensed][mit-badge]][mit-url]
+[![Discord chat][discord-badge]][discord-url]
 
 [crates-badge]:  https://img.shields.io/badge/kerasty-0
 [crates-url]: https://crates.io/crates/kerasty
 [mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
 [mit-url]: https://github.com/HomeroRR/kerasty/blob/main/LICENSE
+[discord-badge]: https://img.shields.io/badge/Discord--0
+[discord-url]: https://discord.gg/cZQnB8zX2H
 
 
 
