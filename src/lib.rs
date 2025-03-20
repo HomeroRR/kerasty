@@ -1,4 +1,4 @@
-//! Keras for Rust with support for Web Assembly.
+//! Keras for Candle (Rust ML framework) with support for Web Assembly.
 //!
 //! # Roadmap of Supported Layers
 //!
