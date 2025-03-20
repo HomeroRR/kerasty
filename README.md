@@ -1,5 +1,15 @@
 # kerasty
-Keras for Rust with support for Web Assembly.
+Keras for Candle (Rust ML framework) with support for Web Assembly.
+
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][mit-badge]][mit-url]
+
+[crates-badge]:  https://img.shields.io/badge/kerasty-0
+[crates-url]: https://crates.io/crates/kerasty
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[mit-url]: https://github.com/HomeroRR/kerasty/blob/main/LICENSE
+
+
 
 # Roadmap of Supported Layers
 
@@ -17,7 +27,8 @@ Keras for Rust with support for Web Assembly.
 
 # Examples
 Solution to the classic [XOR problem](https://www.geeksforgeeks.org/how-neural-networks-solve-the-xor-problem)
-```Rust
+
+```rust
 use kerasty::{Dense, Device, Loss, Metric, Model, Optimizer, Sequential, Tensor};
 
 // Define the XOR input and output data
@@ -60,7 +71,7 @@ for i in 0..4 {
 }
 ```
 The expected output is as follows:
-```
+```shell
 Predictions:
 Input: [0.0, 0.0] => Predicted Output: 0, Actual Output: 0
 Input: [0.0, 1.0] => Predicted Output: 1, Actual Output: 1
