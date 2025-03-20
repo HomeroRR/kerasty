@@ -16,7 +16,7 @@
 //!
 //!# Examples
 //!Solution to the classic [XOR problem](https://www.geeksforgeeks.org/how-neural-networks-solve-the-xor-problem)
-//!```no_run
+//!```rust,no_run
 //!use kerasty::{Dense, Device, Loss, Metric, Model, Optimizer, Sequential, Tensor};
 //!
 //!// Define the XOR input and output data
@@ -59,7 +59,7 @@
 //!}
 //!```
 //!The expected output is as follows:
-//!```no_run
+//!```shell,no_run
 //!Predictions:
 //!Input: [0.0, 0.0] => Predicted Output: 0, Actual Output: 0
 //!Input: [0.0, 1.0] => Predicted Output: 1, Actual Output: 1
