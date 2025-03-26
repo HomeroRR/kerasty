@@ -13,6 +13,6 @@ pub trait Model {
     fn compile(&mut self, optimizer: Optimizer, loss: Loss, metrics: Vec<Metric>) -> Result<()>;
     fn fit(&mut self, x: Tensor, y: Tensor, epochs: u64) -> Result<()>;
     fn predict(&self, x: &Tensor) -> Tensor;
-    fn evaluate(&self, x: Tensor, y: Tensor) -> f64;
+    fn evaluate(&self, x: &Tensor, y: &Tensor) -> f64;
 }
 

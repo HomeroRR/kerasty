@@ -47,6 +47,9 @@ mod tests {
             );
         }
 
+        // Evaluate the model
+        println!("Average loss: {}", model.evaluate(&x, &y));
+
         Ok(())
     }
 }

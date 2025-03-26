@@ -34,7 +34,6 @@ where
         let dtype = DType::F64;
         let dev = Device::cuda_if_available(0).unwrap_or_else(|_| Device::Cpu);
         let varmap = VarMap::new();
-        // let vb = VarBuilder::from_varmap(&varmap, dtype, &dev);
 
         Sequential {
             layers: Vec::new(),
@@ -117,7 +116,7 @@ where
         self.seq.forward(x).unwrap()
     }
 
-    fn evaluate(&self, x: Tensor, y: Tensor) -> f64 {
+    fn evaluate(&self, x: &Tensor, y: &Tensor) -> f64 {
         let y_pred = self.predict(&x);
         let loss = match self.loss {
             Loss::MSE => mse,
@@ -126,7 +125,7 @@ where
             Loss::CrossEntropy => cross_entropy,
         };
         let sum_loss = loss(&y_pred, &y).unwrap().to_vec0::<f64>().unwrap();
-        let avg_loss = sum_loss / y.dims1().unwrap() as f64;
+        let avg_loss = sum_loss / y.dims2().unwrap().0 as f64;
         avg_loss
     }
 }
