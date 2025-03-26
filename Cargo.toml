@@ -1,6 +1,6 @@
 [package]
 name = "kerasty"
-version = "0.2.1"
+version = "0.2.2"
 description = "Keras for Rust with support for Web Assembly."
 categories = ["science", "wasm", "web-programming"]
 keywords = ["keras", "webassembly", "candle", "ai", "machinelearning"]
