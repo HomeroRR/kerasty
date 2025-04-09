@@ -48,7 +48,9 @@ mod tests {
         }
 
         // Evaluate the model
-        println!("Average loss: {}", model.evaluate(&x, &y));
+        let score = model.evaluate(&x, &y);
+        println!("Average loss: {}", score[0]);
+        println!("Accuracy: {}", score[1]);
 
         Ok(())
     }

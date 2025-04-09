@@ -1,6 +1,6 @@
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::loss::{binary_cross_entropy_with_logit, cross_entropy, mse, nll};
-use candle_nn::Optimizer as CandleOptimizer;
+use candle_nn::{ModuleT, Optimizer as CandleOptimizer};
 use candle_nn::{AdamW, Module, ParamsAdamW, VarMap, SGD};
 
 use crate::common::definitions::{Loss, Metric, Optimizer, OptimizerInstance};
@@ -96,7 +96,7 @@ where
         /* Train the model*/
         for _e in 0..epochs {
             // Forward pass
-            let y_pred = self.seq.forward(&x)?;
+            let y_pred = self.seq.forward_t(&x, true)?;
             // Compute loss
             let loss_value = loss(&y_pred, &y)?;
             // Update weights
@@ -116,7 +116,7 @@ where
         self.seq.forward(x).unwrap()
     }
 
-    fn evaluate(&self, x: &Tensor, y: &Tensor) -> f64 {
+    fn evaluate(&self, x: &Tensor, y: &Tensor) -> Vec<f64> {
         let y_pred = self.predict(&x);
         let loss = match self.loss {
             Loss::MSE => mse,
@@ -126,6 +126,29 @@ where
         };
         let sum_loss = loss(&y_pred, &y).unwrap().to_vec0::<f64>().unwrap();
         let avg_loss = sum_loss / y.dims2().unwrap().0 as f64;
-        avg_loss
+        let mut result = Vec::<f64>::from([avg_loss]);
+
+        if let Some(Metric::Accuracy) = self.metrics.get(0) {
+            // Compute accuracy
+            let y_pred = y_pred
+                .reshape(y_pred.dims2().unwrap().0)
+                .unwrap()
+                .to_vec1::<f64>()
+                .unwrap();
+            let y = y
+                .reshape(y.dims2().unwrap().0)
+                .unwrap()
+                .to_vec1::<f64>()
+                .unwrap();
+            let mut correct = 0;
+            for i in 0..y.len() {
+                if (y_pred[i] >= 0.5 && y[i] == 1.0) || (y_pred[i] < 0.5 && y[i] == 0.0) {
+                    correct += 1;
+                }
+            }
+            let accuracy = correct as f64 / y.len() as f64;
+            result.push(accuracy);
+        }
+        result
     }
 }
