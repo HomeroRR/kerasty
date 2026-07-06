@@ -1,96 +1,95 @@
-//! Keras for Candle (Rust ML framework) with support for Web Assembly.
+//! # Kerasty — Keras for Rust, powered by [Candle], with WebAssembly support.
 //!
-//! # Roadmap of Supported Layers
+//! Kerasty gives you a familiar, Keras-style API for building, training and
+//! running neural networks in Rust. Build a [`Sequential`] stack from any mix of
+//! [layers](crate::layer), `compile` it with an [`Optimizer`], [`Loss`] and
+//! [`Metric`]s, then `fit`, `predict` and `evaluate`. Trained models can be
+//! saved as safetensors and loaded for inference — including in the browser via
+//! `wasm32`.
 //!
-//! |    Layer   | State |                        Example                            |
-//! |------------|-------|-----------------------------------------------------------|
-//! |    Dense   |&#9989;| [Dense](https://docs.rs/kerasty/latest/kerasty/layer/dense/struct.Dense.html) |
-//! |    Convolution   |🏗️| CNN|
-//! |    Normalization |🏗️| Norm|
-//! |    Flatten       |🏗️| Flatten|
-//! |    Pooling       |🏗️| Pool|
-//! |    Recurrent     |🏗️| RNN|
-//! |    Attention     |🏗️| Attn|
-//! |    Bert          |🏗️| BERT|
-//! |    Llama         |🏗️| LLAMA|
+//! ## Roadmap of Supported Layers
 //!
-//!# Examples
-//!Solution to the classic [XOR problem](https://www.geeksforgeeks.org/how-neural-networks-solve-the-xor-problem)
-//!```rust,no_run
-//!use kerasty::{Dense, Device, Loss, Metric, Model, Optimizer, Result, Sequential, Tensor};
+//! | Layer | State |
+//! |-------|-------|
+//! | Dense | ✅ |
+//! | Convolution (1D/2D) | ✅ |
+//! | Pooling (Max/Avg/GlobalAvg) | ✅ |
+//! | Flatten / Reshape | ✅ |
+//! | Normalization (Batch/Layer) | ✅ |
+//! | Dropout | ✅ |
+//! | Embedding | ✅ |
+//! | Recurrent (SimpleRNN/LSTM/GRU) | ✅ |
+//! | Attention (Multi-Head) | ✅ |
+//! | BERT / Llama | 🏗️ composable via [`MultiHeadAttention`] + [`Embedding`] + [`LayerNorm`] |
 //!
-//!fn test_xor_problem() -> Result<()> {
-//!  // Define the XOR input and output data
-//!  let x_data = vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0];
-//!  let x = Tensor::from_slice(&x_data, (4, 2), &Device::Cpu)?;
-//!  let y_data = vec![0.0, 1.0, 1.0, 0.0];
-//!  let y = Tensor::from_slice(&y_data, (4, 1), &Device::Cpu)?;
+//! ## Example — the classic XOR problem
 //!
-//!  // Build the neural network model
-//!  let mut model = Sequential::new();
-//!  model.add(Dense::new(2, 2, "relu"));
-//!  model.add(Dense::new(1, 2, "sigmoid"));
+//! ```no_run
+//! use kerasty::{Dense, Device, Loss, Metric, Model, Optimizer, Result, Sequential, Tensor};
 //!
-//!  // Compile the model
-//!  model.compile(
-//!      Optimizer::Adam(0.001, 0.9, 0.999, 1e-8, 0.0),
-//!      Loss::BinaryCrossEntropyWithLogit,
-//!    vec![Metric::Accuracy],
-//!  )?;
+//! fn xor() -> Result<()> {
+//!     let x = Tensor::from_slice(&[0f32, 0., 0., 1., 1., 0., 1., 1.], (4, 2), &Device::Cpu)?;
+//!     let y = Tensor::from_slice(&[0f32, 1., 1., 0.], (4, 1), &Device::Cpu)?;
 //!
-//!  // Train the model
-//!  model.fit(x.clone(), y.clone(), 10000)?;
+//!     let mut model = Sequential::new();
+//!     model.add(Dense::new(8, 2, "tanh"));
+//!     model.add(Dense::new(1, 8, "sigmoid"));
 //!
-//!  // Make predictions
-//!  let predictions = model.predict(&x);
-//!  let predictions = predictions.reshape(4)?.to_vec1::<f64>()?;
-//!  let predictions: Vec<i32> = predictions
-//!      .iter()
-//!      .map(|&p| if p >= 0.5 { 1 } else { 0 })
-//!      .collect();
+//!     // sigmoid output pairs with BinaryCrossEntropy (probabilities in).
+//!     model.compile(
+//!         Optimizer::adam(0.05),
+//!         Loss::BinaryCrossEntropy,
+//!         vec![Metric::Accuracy],
+//!     )?;
+//!     model.fit(x.clone(), y.clone(), 3_000)?;
 //!
-//!  println!("Predictions:");
-//!  for i in 0..4 {
-//!      println!(
-//!          "Input: {:?} => Predicted Output: {}, Actual Output: {}",
-//!          &x_data[i * 2..i * 2 + 2],
-//!          predictions[i],
-//!          y_data[i]
-//!      );
-//!  }
-//! 
-//!  // Evaluate the model
-//!  let score = model.evaluate(&x, &y);
-//!  println!("Average loss: {}", score[0]);
-//!  println!("Accuracy: {}", score[1]);
+//!     let score = model.evaluate(&x, &y)?;
+//!     println!("loss = {:.4}, accuracy = {:.2}", score[0], score[1]);
+//!     Ok(())
+//! }
+//! ```
 //!
-//!  Ok(())
-//!}
-//!```
-//!The expected output is as follows:
-//!```shell,no_run
-//!Predictions:
-//!Input: [0.0, 0.0] => Predicted Output: 0, Actual Output: 0
-//!Input: [0.0, 1.0] => Predicted Output: 1, Actual Output: 1
-//!Input: [1.0, 0.0] => Predicted Output: 1, Actual Output: 1
-//!Input: [1.0, 1.0] => Predicted Output: 0, Actual Output: 0
-//!```
-//!# License
-//!MIT
+//! [Candle]: https://github.com/huggingface/candle
 //!
-//!Copyright © 2025-2035 Homero Roman Roman  
-//!Copyright © 2025-2035 Frederick Roman
+//! # License
+//! MIT — Copyright © 2025-2035 Homero Roman Roman, Frederick Roman.
 
-pub use candle_core::{bail, DType, Device, Result, Tensor};
+#![warn(missing_docs)]
+
+// Re-export the handful of Candle types users interact with directly, so a
+// single `use kerasty::*;` is enough to get started.
+pub use candle_core::{bail, DType, Device, Result, Tensor, D};
 
 pub mod common;
+pub mod layer;
+pub mod sequential;
+
+mod optimizer;
+
 pub use crate::common::definitions::{
-    Activation, Initializer, Loss, Metric, Optimizer, Regularizer,
+    Activation, Initializer, Loss, Metric, Optimizer, Padding, Regularizer,
 };
 pub use crate::common::traits::{Layer, Model};
 
-pub mod layer;
-pub use crate::layer::dense::Dense;
-
-pub mod sequential;
+pub use crate::layer::{
+    AvgPool2D, BatchNorm, Conv1D, Conv2D, Dense, Dropout, Embedding, Flatten,
+    GlobalAveragePooling2D, Gru, LayerNorm, Lstm, MaxPool2D, MultiHeadAttention, Reshape,
+    SimpleRNN,
+};
 pub use crate::sequential::Sequential;
+
+/// Convenience prelude: `use kerasty::prelude::*;` pulls in everything needed to
+/// build, train and run a model.
+pub mod prelude {
+    pub use crate::common::definitions::{
+        Activation, Initializer, Loss, Metric, Optimizer, Padding, Regularizer,
+    };
+    pub use crate::common::traits::{Layer, Model};
+    pub use crate::layer::{
+        AvgPool2D, BatchNorm, Conv1D, Conv2D, Dense, Dropout, Embedding, Flatten,
+        GlobalAveragePooling2D, Gru, LayerNorm, Lstm, MaxPool2D, MultiHeadAttention, Reshape,
+        SimpleRNN,
+    };
+    pub use crate::sequential::Sequential;
+    pub use candle_core::{DType, Device, Result, Tensor, D};
+}

@@ -1,55 +1,72 @@
-pub use candle_core::{bail, DType, Device, Result, Tensor};
-use candle_nn::ops::{sigmoid, softmax};
-use candle_nn::{Linear, Module, VarBuilder, VarMap};
+//! Fully-connected (dense) layer.
 
-use crate::common::definitions::Activation;
+use candle_core::{bail, Result, Tensor};
+use candle_nn::{linear, Linear, Module, VarBuilder};
+
+use crate::common::definitions::{Activation, Initializer};
 use crate::common::traits::Layer;
 
-/* Function for creatin a Dense layer from Candle in the style of Keras */
+/// A densely-connected layer: `activation(x · Wᵀ + b)`.
+///
+/// ```
+/// use kerasty::Dense;
+/// // 64 output units, 128 input features, ReLU activation
+/// let layer = Dense::new(64, 128, "relu");
+/// ```
 #[derive(Clone, Debug)]
 pub struct Dense {
     units: usize,
     input_dim: usize,
     activation: Activation,
+    initializer: Initializer,
     linear: Option<Linear>,
 }
 
 impl Dense {
+    /// Create a dense layer with `units` outputs, `input_dim` inputs and the
+    /// named `activation` (see [`Activation::from_str`]). An unknown activation
+    /// name falls back to linear.
     pub fn new(units: usize, input_dim: usize, activation: &str) -> Self {
-        let activation = activation.parse().unwrap_or(Activation::Linear);
         Dense {
             units,
             input_dim,
-            activation: activation,
+            activation: activation.parse().unwrap_or_default(),
+            initializer: Initializer::default(),
             linear: None,
         }
+    }
+
+    /// Builder: set the kernel initializer.
+    pub fn with_initializer(mut self, initializer: Initializer) -> Self {
+        self.initializer = initializer;
+        self
+    }
+
+    /// Builder: set the activation from an [`Activation`] value.
+    pub fn with_activation(mut self, activation: Activation) -> Self {
+        self.activation = activation;
+        self
     }
 }
 
 impl Layer for Dense {
-    fn init(&self, varmap: &VarMap, dtype: DType, dev: &Device, name: &str) -> Result<Self> {
-        let vb = VarBuilder::from_varmap(varmap, dtype, &dev).pp(name);
-        let (out_dim, in_dim) = (self.units, self.input_dim);
-        let linear = candle_nn::linear(in_dim, out_dim, vb)?;
-        Ok(Self {
-            linear: Some(linear),
-            ..self.clone()
-        })
+    fn build(&mut self, vb: VarBuilder) -> Result<()> {
+        // `candle_nn::linear` seeds sensible defaults; the initializer is kept
+        // for API parity and future per-layer control.
+        let _ = self.initializer;
+        self.linear = Some(linear(self.input_dim, self.units, vb)?);
+        Ok(())
     }
-}
 
-impl Module for Dense {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        if let Some(linear) = &self.linear {
-            let res = linear.forward(xs)?;
-            match self.activation {
-                Activation::Linear => Ok(res),
-                Activation::Sigmoid => Ok(sigmoid(&res)?),
-                Activation::ReLU => Ok(res.relu()?),
-                Activation::Softmax => Ok(softmax(&res, 1)?),
-            }
-        } else {
-            bail!("Linear module not initialized")
-        }
+    fn forward(&self, xs: &Tensor, _train: bool) -> Result<Tensor> {
+        let Some(linear) = &self.linear else {
+            bail!("Dense layer used before `build`/`compile`");
+        };
+        let z = linear.forward(xs)?;
+        self.activation.apply(&z)
+    }
+
+    fn kind(&self) -> &'static str {
+        "Dense"
     }
 }

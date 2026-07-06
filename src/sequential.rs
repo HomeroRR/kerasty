@@ -1,154 +1,181 @@
+//! The `Sequential` model: a linear stack of heterogeneous layers.
+
+use std::path::Path;
+
 use candle_core::{DType, Device, Result, Tensor};
-use candle_nn::loss::{binary_cross_entropy_with_logit, cross_entropy, mse, nll};
-use candle_nn::{ModuleT, Optimizer as CandleOptimizer};
-use candle_nn::{AdamW, Module, ParamsAdamW, VarMap, SGD};
+use candle_nn::{VarBuilder, VarMap};
 
-use crate::common::definitions::{Loss, Metric, Optimizer, OptimizerInstance};
+use crate::common::definitions::{Loss, Metric, Optimizer};
 use crate::common::traits::{Layer, Model};
+use crate::optimizer::OptimizerInstance;
 
-/* Define the Sequential model */
-pub struct Sequential<T>
-where
-    T: Module + 'static + Layer,
-{
-    layers: Vec<T>,
+/// A Keras-style linear stack of layers.
+///
+/// Unlike a design generic over a single layer type, `Sequential` stores
+/// `Box<dyn Layer>`, so any mix of layer types can be stacked:
+///
+/// ```no_run
+/// use kerasty::{Sequential, Conv2D, MaxPool2D, Flatten, Dense};
+/// let mut model = Sequential::new();
+/// model.add(Conv2D::new(1, 16, 3, "relu"));
+/// model.add(MaxPool2D::new(2));
+/// model.add(Flatten::new());
+/// model.add(Dense::new(10, 16 * 13 * 13, "softmax"));
+/// ```
+///
+/// All parameters live in one shared [`VarMap`], which the optimizer trains and
+/// [`save`](Sequential::save) / [`load`](Sequential::load) persist as
+/// safetensors.
+pub struct Sequential {
+    layers: Vec<Box<dyn Layer>>,
+    varmap: VarMap,
+    device: Device,
+    dtype: DType,
     optimizer: Optimizer,
     loss: Loss,
     metrics: Vec<Metric>,
-    seq: candle_nn::Sequential,
-    varmap: VarMap,
-    dtype: DType,
-    dev: candle_core::Device,
+    built: bool,
+    verbose: bool,
 }
 
-impl<T> Sequential<T>
-where
-    T: Module + 'static + Layer,
-{
-    /* Create a new Sequential model */
+impl Sequential {
+    /// Create an empty model. Defaults: CUDA if available else CPU, `f32` dtype
+    /// (as in Keras, and required by some fused kernels such as LayerNorm),
+    /// Adam(1e-3) optimizer, MSE loss.
     pub fn new() -> Self {
-        let optimizer = Optimizer::SGD(0.01);
-        let loss = Loss::MSE;
-        let metrics = vec![Metric::Accuracy];
-        let seq = candle_nn::seq();
-        let dtype = DType::F64;
-        let dev = Device::cuda_if_available(0).unwrap_or_else(|_| Device::Cpu);
-        let varmap = VarMap::new();
-
         Sequential {
             layers: Vec::new(),
-            optimizer: optimizer,
-            loss: loss,
-            metrics: metrics,
-            seq: seq,
-            varmap: varmap,
-            dtype: dtype,
-            dev: dev,
+            varmap: VarMap::new(),
+            device: Device::cuda_if_available(0).unwrap_or(Device::Cpu),
+            dtype: DType::F32,
+            optimizer: Optimizer::default(),
+            loss: Loss::MSE,
+            metrics: vec![Metric::Accuracy],
+            built: false,
+            verbose: false,
         }
     }
 
-    pub fn add(&mut self, layer: T) {
-        self.layers.push(layer);
+    /// Builder: choose the compute device (CPU, CUDA, …).
+    pub fn with_device(mut self, device: Device) -> Self {
+        self.device = device;
+        self
+    }
+
+    /// Builder: choose the parameter/compute dtype (`f32` default, which suits
+    /// WebAssembly inference and fused kernels; use `f64` for extra precision on
+    /// layers that support it).
+    pub fn with_dtype(mut self, dtype: DType) -> Self {
+        self.dtype = dtype;
+        self
+    }
+
+    /// Builder: print the loss periodically during [`fit`](Model::fit).
+    pub fn with_verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
+    }
+
+    /// Append a layer to the stack.
+    pub fn add<L: Layer + 'static>(&mut self, layer: L) {
+        self.layers.push(Box::new(layer));
+    }
+
+    /// The device the model lives on.
+    pub fn device(&self) -> &Device {
+        &self.device
+    }
+
+    /// Run the stack, threading the `train` flag through every layer.
+    fn forward(&self, x: &Tensor, train: bool) -> Result<Tensor> {
+        let mut out = x.clone();
+        for layer in &self.layers {
+            out = layer.forward(&out, train)?;
+        }
+        Ok(out)
+    }
+
+    /// Print a Keras-style summary of the layer stack.
+    pub fn summary(&self) {
+        println!("Model: Sequential");
+        println!("{:-<48}", "");
+        println!("{:<4} {:<28} {:<14}", "#", "Layer", "Trainable");
+        println!("{:-<48}", "");
+        for (i, layer) in self.layers.iter().enumerate() {
+            println!("{:<4} {:<28} {:<14}", i, layer.kind(), "yes");
+        }
+        println!("{:-<48}", "");
+        let n_params: usize = self.varmap.all_vars().iter().map(|v| v.elem_count()).sum();
+        println!("Total trainable parameters: {n_params}");
+        println!("{:-<48}", "");
+    }
+
+    /// Save all trainable parameters to a safetensors file.
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        self.varmap.save(path)
+    }
+
+    /// Load trainable parameters from a safetensors file. The model must already
+    /// be [`compile`](Model::compile)d (so the variables exist) before loading.
+    pub fn load<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        self.varmap.load(path)
     }
 }
 
-impl<T> Model for Sequential<T>
-where
-    T: Module + 'static + Layer,
-{
+impl Default for Sequential {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Model for Sequential {
     fn compile(&mut self, optimizer: Optimizer, loss: Loss, metrics: Vec<Metric>) -> Result<()> {
         self.optimizer = optimizer;
         self.loss = loss;
         self.metrics = metrics;
 
-        // Add layers to the model
-        let mut seq = candle_nn::seq();
-        for (i, layer) in self.layers.iter().enumerate() {
-            let layer = layer.init(&self.varmap, self.dtype, &self.dev, &i.to_string())?;
-            seq = seq.add(layer);
+        let root = VarBuilder::from_varmap(&self.varmap, self.dtype, &self.device);
+        for (i, layer) in self.layers.iter_mut().enumerate() {
+            let name = format!("layer_{i}_{}", layer.kind().to_ascii_lowercase());
+            layer.build(root.pp(&name))?;
         }
-        self.seq = seq;
-
+        self.built = true;
         Ok(())
     }
 
     fn fit(&mut self, x: Tensor, y: Tensor, epochs: u64) -> Result<()> {
-        let loss = match self.loss {
-            Loss::MSE => mse,
-            Loss::NLL => nll,
-            Loss::BinaryCrossEntropyWithLogit => binary_cross_entropy_with_logit,
-            Loss::CrossEntropy => cross_entropy,
-        };
-        let mut optimizer: OptimizerInstance = match self.optimizer {
-            Optimizer::SGD(lr) => OptimizerInstance::SGD(SGD::new(self.varmap.all_vars(), lr)?),
-            Optimizer::Adam(lr, beta1, beta2, eps, weight_decay) => {
-                let params = ParamsAdamW {
-                    lr,
-                    beta1,
-                    beta2,
-                    eps,
-                    weight_decay,
-                };
-                OptimizerInstance::Adam(AdamW::new(self.varmap.all_vars(), params)?)
+        if !self.built {
+            candle_core::bail!("call `compile` before `fit`");
+        }
+        let mut optimizer = OptimizerInstance::build(&self.optimizer, self.varmap.all_vars())?;
+        for epoch in 0..epochs {
+            let y_pred = self.forward(&x, true)?;
+            let loss = self.loss.compute(&y_pred, &y)?;
+            optimizer.backward_step(&loss)?;
+            if self.verbose && (epoch + 1) % 100 == 0 {
+                let value = loss.to_dtype(DType::F64)?.to_scalar::<f64>()?;
+                println!("epoch {:>5} - loss {value:.6}", epoch + 1);
             }
-        };
-
-        /* Train the model*/
-        for _e in 0..epochs {
-            // Forward pass
-            let y_pred = self.seq.forward_t(&x, true)?;
-            // Compute loss
-            let loss_value = loss(&y_pred, &y)?;
-            // Update weights
-            match optimizer {
-                OptimizerInstance::SGD(ref mut sgd) => {
-                    sgd.backward_step(&loss_value)?;
-                }
-                OptimizerInstance::Adam(ref mut adam) => {
-                    adam.backward_step(&loss_value)?;
-                }
-            };
         }
         Ok(())
     }
 
-    fn predict(&self, x: &Tensor) -> Tensor {
-        self.seq.forward(x).unwrap()
+    fn predict(&self, x: &Tensor) -> Result<Tensor> {
+        self.forward(x, false)
     }
 
-    fn evaluate(&self, x: &Tensor, y: &Tensor) -> Vec<f64> {
-        let y_pred = self.predict(&x);
-        let loss = match self.loss {
-            Loss::MSE => mse,
-            Loss::NLL => nll,
-            Loss::BinaryCrossEntropyWithLogit => binary_cross_entropy_with_logit,
-            Loss::CrossEntropy => cross_entropy,
-        };
-        let sum_loss = loss(&y_pred, &y).unwrap().to_vec0::<f64>().unwrap();
-        let avg_loss = sum_loss / y.dims2().unwrap().0 as f64;
-        let mut result = Vec::<f64>::from([avg_loss]);
-
-        if let Some(Metric::Accuracy) = self.metrics.get(0) {
-            // Compute accuracy
-            let y_pred = y_pred
-                .reshape(y_pred.dims2().unwrap().0)
-                .unwrap()
-                .to_vec1::<f64>()
-                .unwrap();
-            let y = y
-                .reshape(y.dims2().unwrap().0)
-                .unwrap()
-                .to_vec1::<f64>()
-                .unwrap();
-            let mut correct = 0;
-            for i in 0..y.len() {
-                if (y_pred[i] >= 0.5 && y[i] == 1.0) || (y_pred[i] < 0.5 && y[i] == 0.0) {
-                    correct += 1;
-                }
-            }
-            let accuracy = correct as f64 / y.len() as f64;
-            result.push(accuracy);
+    fn evaluate(&self, x: &Tensor, y: &Tensor) -> Result<Vec<f64>> {
+        let y_pred = self.predict(x)?;
+        let loss = self
+            .loss
+            .compute(&y_pred, y)?
+            .to_dtype(DType::F64)?
+            .to_scalar::<f64>()?;
+        let mut results = Vec::with_capacity(1 + self.metrics.len());
+        results.push(loss);
+        for metric in &self.metrics {
+            results.push(metric.compute(&y_pred, y)?);
         }
-        result
+        Ok(results)
     }
 }

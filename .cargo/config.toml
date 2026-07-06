@@ -1,0 +1,4 @@
+# Enable getrandom's browser RNG backend for WebAssembly inference builds.
+# Required by getrandom 0.3 in addition to its `wasm_js` feature (see Cargo.toml).
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

@@ -1,6 +1,6 @@
 [package]
 name = "kerasty"
-version = "0.2.3"
+version = "0.3.0"
 description = "Keras for Rust with support for Web Assembly."
 categories = ["science", "wasm", "web-programming"]
 keywords = ["keras", "webassembly", "candle", "ai", "machinelearning"]
@@ -13,5 +13,21 @@ edition = "2021"
 rust-version = "1.84.0"
 
 [dependencies]
-candle-core = "0.8.4"
-candle-nn = "=0.8.3"
+candle-core = "0.11"
+candle-nn = "0.11"
+
+# On wasm32, `getrandom` (pulled in transitively by `rand`) needs its browser
+# backend so that weight initialization links and runs in the browser. getrandom
+# 0.3 requires both the `wasm_js` feature (below) and a cfg flag, which lives in
+# `.cargo/config.toml`.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[features]
+# Opt-in marker for WebAssembly inference builds. The crate compiles to
+# `wasm32-unknown-unknown` without extra features, but this makes intent
+# explicit and is a place to gate browser-only glue later.
+wasm = []
+
+[profile.release]
+opt-level = 3
